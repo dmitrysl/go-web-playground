@@ -15,7 +15,22 @@ import (
 	"github.com/go-ozzo/ozzo-routing/file"
 	"time"
 	"github.com/dgrijalva/jwt-go"
+	"github.com/go-ozzo/ozzo-routing/auth"
+	"strings"
 )
+
+type Claims struct {
+	Username string `json:"username"`
+	// recommended having
+	jwt.StandardClaims
+}
+
+type UserProfile struct {
+	Id uint32
+	FirstName string
+	LastName string
+	Email string
+}
 
 func main() {
 	port := os.Getenv("PORT")
@@ -69,7 +84,8 @@ func main() {
 	api := router.Group("/api")
 	api.Use(
 		// these handlers are shared by the routes in the api group only
-		content.TypeNegotiator(content.JSON, content.XML),
+		//content.TypeNegotiator(content.JSON, content.XML),
+		content.TypeNegotiator(content.JSON),
 	)
 	api.Get("/users", func(c *routing.Context) error {
 		return c.Write("user list")
@@ -80,21 +96,33 @@ func main() {
 	api.Put(`/users/<id:\d+>`, func(c *routing.Context) error {
 		return c.Write("update user " + c.Param("id"))
 	})
-	api.Post("/auth/token", func(c *routing.Context) error {
+	api.Post("/auth/refresh-token-auth", func(c *routing.Context) error {
+		return c.Write("")
+	})
+	api.Post("/auth/token-auth", func(c *routing.Context) error {
 		// Create a new token object, specifying signing method and the claims
 		// you would like it to contain.
-		token := jwt.NewWithClaims(jwt.SigningMethodHS256, jwt.MapClaims{
-			"foo": "bar",
-			"nbf": time.Date(2015, 10, 10, 12, 0, 0, 0, time.UTC).Unix(),
-		})
+		claims := Claims{
+			"test",
+			jwt.StandardClaims{
+				Audience: "",
+				ExpiresAt: time.Now().Add(time.Minute * 1).Unix(),
+				//ExpiresAt: time.Now().Unix(),
+				Issuer: "localhost:8080",
+				Subject: "",
+				Id: "",
+			},
+		}
+
+		token := jwt.NewWithClaims(jwt.SigningMethodHS256, claims)
 		// Sign and get the complete encoded token as a string using the secret
 		hmacSampleSecret := []byte("asdjkh34mx0_23#@594jSrtv4")
 		tokenString, err := token.SignedString(hmacSampleSecret)
 		fmt.Println(err)
 		return c.Write(tokenString)
 	})
-	api.Post("/token/validate", func(c *routing.Context) error {
-		tokenString := c.Request.Header.Get("x-auth-token")
+	api.Post("/auth/token/validate", func(c *routing.Context) error {
+		tokenString := c.Request.Header.Get("Authorization")
 		if tokenString == "" {
 			log.Fatal("x-auth-token must be provided")
 			tokenString = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJmb28iOiJiYXIiLCJuYmYiOjE0NDQ0Nzg0MDB9.u1riaD1rW97opCoAuRCTy4w58Br-Zk-bh7vLiRIsrpU"
@@ -106,7 +134,7 @@ func main() {
 		if tokenError.IsValid {
 			return c.Write("OK")
 		} else {
-			return c.Write(tokenError.Errors)
+			return c.Write(tokenError)
 		}
 
 		if claims, ok := token.Claims.(jwt.MapClaims); ok && token.Valid {
@@ -115,6 +143,54 @@ func main() {
 		} else {
 			return c.Write(err)
 		}
+	})
+	api.Use(auth.JWT("asdjkh34mx0_23#@594jSrtv4"))
+	api.Get("/user/profile", func(c *routing.Context) error {
+		tokenString := c.Request.Header.Get("Authorization")
+		if tokenString == "" {
+			log.Fatal("x-auth-token must be provided")
+		}
+
+		token, err := parseToken(tokenString)
+		tokenError := validateToken(token, err)
+
+		if !tokenError.IsValid {
+			c.Abort()
+			return nil
+		}
+		return c.Next()
+	}, func(c *routing.Context) error {
+		tt := c.Get("JWT").(*jwt.Token)
+		if tt == nil {
+			log.Fatal("x-auth-token must be provided")
+		}
+		tokenString := c.Request.Header.Get("x-auth-token")
+		if tokenString == "" {
+			log.Fatal("x-auth-token must be provided")
+		}
+
+		token, err := parseToken(tokenString)
+		tokenError := validateToken(token, err)
+
+		if !tokenError.IsValid {
+			return c.Write(tokenError)
+		}
+
+		data := &struct{
+			A string
+			B bool
+		}{}
+
+		// assume the body data is: {"A":"abc", "B":true}
+		// data will be populated as: {A: "abc", B: true}
+		if err := c.Read(&data); err != nil {
+			return err
+		}
+
+		profile := UserProfile {
+			Id: 123213,
+		}
+		return c.Write(profile)
 	})
 
 	// serve index file
@@ -139,7 +215,7 @@ func parseToken(tokenString string) (*jwt.Token, error) {
 	// useful if you use multiple keys for your application.  The standard is to use 'kid' in the
 	// head of the token to identify which key to use, but the parsed token (head and claims) is provided
 	// to the callback, providing flexibility.
-	token, err := jwt.Parse(tokenString, func(token *jwt.Token) (interface{}, error) {
+	token, err := jwt.ParseWithClaims(tokenString, &Claims{}, func(token *jwt.Token) (interface{}, error) {
 		// Don't forget to validate the alg is what you expect:
 		if _, ok := token.Method.(*jwt.SigningMethodHMAC); !ok {
 			return nil, fmt.Errorf("Unexpected signing method: %v", token.Header["alg"])
@@ -174,6 +250,7 @@ func validateToken(token *jwt.Token, err error) JwtTokenValidationError {
 	return JwtTokenValidationError {
 		IsValid: false,
 		Errors: tokenError.Errors,
+		Text: tokenError.Inner.Error(),
 	}
 }
 
@@ -182,5 +259,61 @@ func validateTokenClaims(token *jwt.Token) {
 		fmt.Println(claims["foo"], claims["nbf"])
 	} else {
 		fmt.Println(token)
+	}
+}
+
+func DefaultJWTTokenHandler(c *routing.Context, token *jwt.Token) error {
+	c.Set("JWT", token)
+	return nil
+}
+
+func JWT(verificationKey string) routing.Handler {
+	var opt auth.JWTOptions
+	//if len(options) > 0 {
+	//	opt = options[0]
+	//}
+	//if opt.Realm == "" {
+	//	opt.Realm = DefaultRealm
+	//}
+	//if opt.SigningMethod == "" {
+	//	opt.SigningMethod = "HS256"
+	//}
+	//if opt.TokenHandler == nil {
+	//	opt.TokenHandler = DefaultJWTTokenHandler
+	//}
+	//parser := &jwt.Parser{
+	//	ValidMethods: []string{opt.SigningMethod},
+	//}
+	return func(c *routing.Context) error {
+		header := c.Request.Header.Get("Authorization")
+		message := ""
+		if opt.GetVerificationKey != nil {
+			verificationKey = opt.GetVerificationKey(c)
+		}
+		if strings.HasPrefix(header, "Bearer ") {
+			token, err := jwt.ParseWithClaims(header[7:], &Claims{}, func(token *jwt.Token) (interface{}, error) {
+				// Don't forget to validate the alg is what you expect:
+				if _, ok := token.Method.(*jwt.SigningMethodHMAC); !ok {
+					return nil, fmt.Errorf("Unexpected signing method: %v", token.Header["alg"])
+				}
+
+				// hmacSampleSecret is a []byte containing your secret, e.g. []byte("my_secret_key")
+				hmacSampleSecret := []byte(verificationKey)
+				return hmacSampleSecret, nil
+			})
+			if err == nil && token.Valid {
+				err = opt.TokenHandler(c, token)
+			}
+			if err == nil {
+				return nil
+			}
+			message = err.Error()
+		}
+
+		c.Response.Header().Set("WWW-Authenticate", `Bearer realm="`+opt.Realm+`"`)
+		if message != "" {
+			return routing.NewHTTPError(http.StatusUnauthorized, message)
+		}
+		return routing.NewHTTPError(http.StatusUnauthorized)
 	}
 }
