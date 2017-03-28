@@ -5,6 +5,10 @@ import (
 	"fmt"
 	"net/http"
 	"os"
+	"time"
+	"math/rand"
+	"io"
+	"strconv"
 
 	"github.com/go-ozzo/ozzo-config"
 	"github.com/go-ozzo/ozzo-routing"
@@ -13,10 +17,8 @@ import (
 	"github.com/go-ozzo/ozzo-routing/content"
 	"github.com/go-ozzo/ozzo-routing/fault"
 	"github.com/go-ozzo/ozzo-routing/file"
-	"time"
 	"github.com/dgrijalva/jwt-go"
 	"github.com/go-ozzo/ozzo-routing/auth"
-	"strings"
 )
 
 type Claims struct {
@@ -106,7 +108,7 @@ func main() {
 			"test",
 			jwt.StandardClaims{
 				Audience: "",
-				ExpiresAt: time.Now().Add(time.Minute * 1).Unix(),
+				ExpiresAt: time.Now().Add(time.Hour * 1).Unix(),
 				//ExpiresAt: time.Now().Unix(),
 				Issuer: "localhost:8080",
 				Subject: "",
@@ -144,36 +146,13 @@ func main() {
 			return c.Write(err)
 		}
 	})
-	api.Use(auth.JWT("asdjkh34mx0_23#@594jSrtv4"))
+	api.Use(auth.JWT("asdjkh34mx0_23#@594jSrtv4", auth.JWTOptions{
+		SigningMethod: "HS256",
+	}))
 	api.Get("/user/profile", func(c *routing.Context) error {
-		tokenString := c.Request.Header.Get("Authorization")
-		if tokenString == "" {
+		token := c.Get("JWT").(*jwt.Token)
+		if token == nil {
 			log.Fatal("x-auth-token must be provided")
-		}
-
-		token, err := parseToken(tokenString)
-		tokenError := validateToken(token, err)
-
-		if !tokenError.IsValid {
-			c.Abort()
-			return nil
-		}
-		return c.Next()
-	}, func(c *routing.Context) error {
-		tt := c.Get("JWT").(*jwt.Token)
-		if tt == nil {
-			log.Fatal("x-auth-token must be provided")
-		}
-		tokenString := c.Request.Header.Get("x-auth-token")
-		if tokenString == "" {
-			log.Fatal("x-auth-token must be provided")
-		}
-
-		token, err := parseToken(tokenString)
-		tokenError := validateToken(token, err)
-
-		if !tokenError.IsValid {
-			return c.Write(tokenError)
 		}
 
 		data := &struct{
@@ -191,6 +170,83 @@ func main() {
 			Id: 123213,
 		}
 		return c.Write(profile)
+	})
+	api.Get(`/user/<id:\d+>`, func(c *routing.Context) error {
+		token := c.Get("JWT").(*jwt.Token)
+		if token == nil {
+			log.Fatal("x-auth-token must be provided")
+		}
+
+		data := &struct{
+			FirstName string
+			LastName string
+			Email string
+			IsNew bool
+		}{}
+
+		// assume the body data is: {"A":"abc", "B":true}
+		// data will be populated as: {A: "abc", B: true}
+		if err := c.Read(&data); err != nil {
+			return err
+		}
+
+		Id64, _ := strconv.ParseUint(c.Param("id"), 10, 32)
+		profile := UserProfile {
+			Id: uint32(Id64),
+			FirstName: data.FirstName,
+			LastName: data.LastName,
+			Email: data.Email,
+		}
+		return c.Write(profile)
+	})
+	api.Post("/user", func(c *routing.Context) error {
+		token := c.Get("JWT").(*jwt.Token)
+		if token == nil {
+			log.Fatal("x-auth-token must be provided")
+		}
+
+		data := &struct{
+			FirstName string
+			LastName string
+			Email string
+			IsNew bool
+		}{}
+
+		// assume the body data is: {"A":"abc", "B":true}
+		// data will be populated as: {A: "abc", B: true}
+		if err := c.Read(&data); err != nil {
+			return err
+		}
+
+		profile := UserProfile {
+			Id: rand.Uint32(),
+			FirstName: data.FirstName,
+			LastName: data.LastName,
+			Email: data.Email,
+		}
+		return c.Write(profile)
+	})
+	// curl -XPOST -F file=@server.go -H "Authorization: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ1c2VybmFtZSI6InRlc3QiLCJleHAiOjE0OTA3MjA1ODAsImlzcyI6ImxvY2FsaG9zdDo4MDgwIn0.lPOQZktAIDoLnHYw55jTgLEnHOGdTBqT21tpy88Zc80" localhost:8080/api/upload
+	api.Post("/upload", func(c *routing.Context) error {
+		c.Request.ParseMultipartForm(32 << 20)
+
+		file, handler, err := c.Request.FormFile("file")
+		if err != nil {
+			fmt.Println(err)
+			return nil
+		}
+		defer file.Close()
+
+		f, err := os.OpenFile(handler.Filename, os.O_WRONLY|os.O_CREATE, 0664)
+		if err != nil {
+			fmt.Println(err)
+			return nil
+		}
+		defer f.Close()
+
+		io.Copy(f, file)
+
+		return c.Write(handler.Filename)
 	})
 
 	// serve index file
@@ -259,61 +315,5 @@ func validateTokenClaims(token *jwt.Token) {
 		fmt.Println(claims["foo"], claims["nbf"])
 	} else {
 		fmt.Println(token)
-	}
-}
-
-func DefaultJWTTokenHandler(c *routing.Context, token *jwt.Token) error {
-	c.Set("JWT", token)
-	return nil
-}
-
-func JWT(verificationKey string) routing.Handler {
-	var opt auth.JWTOptions
-	//if len(options) > 0 {
-	//	opt = options[0]
-	//}
-	//if opt.Realm == "" {
-	//	opt.Realm = DefaultRealm
-	//}
-	//if opt.SigningMethod == "" {
-	//	opt.SigningMethod = "HS256"
-	//}
-	//if opt.TokenHandler == nil {
-	//	opt.TokenHandler = DefaultJWTTokenHandler
-	//}
-	//parser := &jwt.Parser{
-	//	ValidMethods: []string{opt.SigningMethod},
-	//}
-	return func(c *routing.Context) error {
-		header := c.Request.Header.Get("Authorization")
-		message := ""
-		if opt.GetVerificationKey != nil {
-			verificationKey = opt.GetVerificationKey(c)
-		}
-		if strings.HasPrefix(header, "Bearer ") {
-			token, err := jwt.ParseWithClaims(header[7:], &Claims{}, func(token *jwt.Token) (interface{}, error) {
-				// Don't forget to validate the alg is what you expect:
-				if _, ok := token.Method.(*jwt.SigningMethodHMAC); !ok {
-					return nil, fmt.Errorf("Unexpected signing method: %v", token.Header["alg"])
-				}
-
-				// hmacSampleSecret is a []byte containing your secret, e.g. []byte("my_secret_key")
-				hmacSampleSecret := []byte(verificationKey)
-				return hmacSampleSecret, nil
-			})
-			if err == nil && token.Valid {
-				err = opt.TokenHandler(c, token)
-			}
-			if err == nil {
-				return nil
-			}
-			message = err.Error()
-		}
-
-		c.Response.Header().Set("WWW-Authenticate", `Bearer realm="`+opt.Realm+`"`)
-		if message != "" {
-			return routing.NewHTTPError(http.StatusUnauthorized, message)
-		}
-		return routing.NewHTTPError(http.StatusUnauthorized)
 	}
 }
