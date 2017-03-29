@@ -2,7 +2,8 @@
   "comment": "",
   "ignore": "test",
   "heroku": {
-    "goVersion": "go1.8"
+    "goVersion": "go1.8",
+    "sync": false
   },
   "package": [
     {
