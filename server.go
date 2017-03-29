@@ -10,7 +10,7 @@ import (
 	"io"
 	"strconv"
 
-	"github.com/go-ozzo/ozzo-config"
+	//"github.com/go-ozzo/ozzo-config"
 	"github.com/go-ozzo/ozzo-routing"
 	"github.com/go-ozzo/ozzo-routing/auth"
 	"github.com/go-ozzo/ozzo-routing/access"
@@ -48,23 +48,23 @@ func main() {
 	}
 
 	// create a Config object
-	c := config.New()
+	//c := config.New()
 
 	// load from one or multiple JSON, YAML, or TOML files.
 	// file formats are determined by their extensions: .json, .yaml, .yml, .toml
 	// c.Load("app.json", "app.dev.json")
 
 	// load configuration from a JSON string
-	c.LoadJSON([]byte(`{
-		"Version": "2.0",
-		"Author": {
-		    "Name": "Foo",
-		    "Email": "bar@example.com"
-		}
-	    }`))
+	//c.LoadJSON([]byte(`{
+	//	"Version": "2.0",
+	//	"Author": {
+	//	    "Name": "Foo",
+	//	    "Email": "bar@example.com"
+	//	}
+	//    }`))
 
 	// get the "Version" value, return "1.0" if it doesn't exist in the config
-	version := c.GetString("Version", "1.0")
+	//version := c.GetString("Version", "1.0")
 
 	//c.Set("Author.Email", "bar@example.com")
 
@@ -72,9 +72,9 @@ func main() {
 		Name, Email string
 	}
 	// populate the author object from the "Author" configuration
-	c.Configure(&author, "Author")
+	//c.Configure(&author, "Author")
 
-	fmt.Println(version)
+	//fmt.Println(version)
 	fmt.Println(author.Name)
 	fmt.Println(author.Email)
 
