@@ -1,0 +1,21 @@
+{
+  "comment": "",
+  "ignore": "test",
+  "package": [
+    {
+      "path": "github.com/go-ozzo/ozzo-config",
+      "revision": "0ff174cf5aa6480026e0b40c14fd9cfb61c4abf6"
+    },
+    {
+      "comment": "v2.0",
+      "path": "github.com/go-ozzo/ozzo-routing",
+      "revision": "70e4c295a3ecbc23bcb49c68fb1e0885a50ed83c"
+    },
+    {
+      "comment": "v3.0",
+      "path": "github.com/dgrijalva/jwt-go",
+      "revision": "d2709f9f1f31ebcda9651b03077758c1f3a0018c"
+    }
+  ],
+  "rootPath": "https://github.com/dmitrysl/go-web-playground"
+}

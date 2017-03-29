@@ -12,13 +12,13 @@ import (
 
 	"github.com/go-ozzo/ozzo-config"
 	"github.com/go-ozzo/ozzo-routing"
+	"github.com/go-ozzo/ozzo-routing/auth"
 	"github.com/go-ozzo/ozzo-routing/access"
 	"github.com/go-ozzo/ozzo-routing/slash"
 	"github.com/go-ozzo/ozzo-routing/content"
 	"github.com/go-ozzo/ozzo-routing/fault"
 	"github.com/go-ozzo/ozzo-routing/file"
 	"github.com/dgrijalva/jwt-go"
-	"github.com/go-ozzo/ozzo-routing/auth"
 )
 
 type Claims struct {
