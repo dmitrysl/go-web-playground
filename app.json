@@ -7,5 +7,5 @@
     "sample",
     "example"
   ],
-  "image": "heroku/go:1.6"
+  "image": "heroku/go:1.8"
 }
