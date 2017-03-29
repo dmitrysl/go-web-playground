@@ -32,6 +32,11 @@ type UserProfile struct {
 	FirstName string
 	LastName string
 	Email string
+	Password string `json:"-"`
+}
+
+type AccessToken struct {
+	AccessToken string `json:"access_token"`
 }
 
 func main() {
@@ -89,23 +94,11 @@ func main() {
 		//content.TypeNegotiator(content.JSON, content.XML),
 		content.TypeNegotiator(content.JSON),
 	)
-	api.Get("/users", func(c *routing.Context) error {
-		return c.Write("user list")
-	})
-	api.Post("/users", func(c *routing.Context) error {
-		return c.Write("create a new user")
-	})
-	api.Put(`/users/<id:\d+>`, func(c *routing.Context) error {
-		return c.Write("update user " + c.Param("id"))
-	})
-	api.Post("/auth/refresh-token-auth", func(c *routing.Context) error {
-		return c.Write("")
-	})
 	api.Post("/auth/token-auth", func(c *routing.Context) error {
 		// Create a new token object, specifying signing method and the claims
 		// you would like it to contain.
 		claims := Claims{
-			"test",
+			"John Dou",
 			jwt.StandardClaims{
 				Audience: "",
 				ExpiresAt: time.Now().Add(time.Hour * 1).Unix(),
@@ -120,8 +113,14 @@ func main() {
 		// Sign and get the complete encoded token as a string using the secret
 		hmacSampleSecret := []byte("asdjkh34mx0_23#@594jSrtv4")
 		tokenString, err := token.SignedString(hmacSampleSecret)
-		fmt.Println(err)
-		return c.Write(tokenString)
+		if err != nil {
+			fmt.Print("Some Error: ")
+			fmt.Println(err)
+		}
+		tokenObj := AccessToken {
+			AccessToken: tokenString,
+		}
+		return c.Write(tokenObj)
 	})
 	api.Post("/auth/token/validate", func(c *routing.Context) error {
 		tokenString := c.Request.Header.Get("Authorization")
@@ -149,6 +148,18 @@ func main() {
 	api.Use(auth.JWT("asdjkh34mx0_23#@594jSrtv4", auth.JWTOptions{
 		SigningMethod: "HS256",
 	}))
+	api.Get("/users", func(c *routing.Context) error {
+		return c.Write("user list")
+	})
+	api.Post("/users", func(c *routing.Context) error {
+		return c.Write("create a new user")
+	})
+	api.Put(`/users/<id:\d+>`, func(c *routing.Context) error {
+		return c.Write("update user " + c.Param("id"))
+	})
+	api.Post("/auth/refresh-token-auth", func(c *routing.Context) error {
+		return c.Write("")
+	})
 	api.Get("/user/profile", func(c *routing.Context) error {
 		token := c.Get("JWT").(*jwt.Token)
 		if token == nil {
